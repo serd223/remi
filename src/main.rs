@@ -232,6 +232,7 @@ impl eframe::App for App {
                         if let Some(i) = bookmark_to_remove {
                             self.bookmarks.remove(i);
                         }
+                        ui.style_mut().wrap_mode = None;
                     },
                 );
 
