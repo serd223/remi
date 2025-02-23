@@ -282,6 +282,7 @@ impl eframe::App for App {
                 scroll_area = scroll_area.scroll_offset(egui::Vec2 { x: 0., y: 0. })
             }
             scroll_area.show(ui, |ui| {
+                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
                 for (i, g) in self.gemtext.data.iter().enumerate() {
                     match g {
                         gemtext::GemtextEntry::Text(t) => {
@@ -359,6 +360,7 @@ impl eframe::App for App {
                         }
                     }
                 }
+                ui.style_mut().wrap_mode = None;
             });
         });
     }
