@@ -1,6 +1,8 @@
 # remi 
 `remi` is a bare-bones [`gemini`](https://geminiprotocol.net/) client.
 
+![screenshot.png](assets/screenshot.png)
+
 ## Features
 * The ability to go back/forward in history
 * Bookmarks
