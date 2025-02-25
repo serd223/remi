@@ -18,12 +18,13 @@ use rustls::RootCertStore;
 use verifier::GeminiCertVerifier;
 
 const BG_COLOR: Color32 = Color32::from_rgb(40, 44, 52);
+const HOVERED_BG_COLOR: Color32 = Color32::from_rgb(48, 54, 64);
 const PREFORMATTED_BG_COLOR: Color32 = Color32::from_rgb(25, 27, 31);
 const RED_COLOR: Color32 = Color32::from_rgb(190, 96, 105);
 const TEXT_COLOR: Color32 = Color32::from_rgb(171, 178, 191);
 const PREFORMATTED_TEXT_COLOR: Color32 = Color32::from_rgb(156, 163, 176);
 const LINK_COLOR: Color32 = Color32::from_rgb(86, 182, 194);
-const LIST_ELEM_COLOR: Color32 = Color32::from_rgb(201, 208, 221);
+const BRIGHT_TEXT_COLOR: Color32 = Color32::from_rgb(201, 208, 221);
 
 const TEXT_SIZE: f32 = 20.;
 const MINOR_SIZE: f32 = 30.;
@@ -166,7 +167,10 @@ impl eframe::App for App {
                         kind: PermanentFailureKind::General,
                         msg,
                     } => {
-                        remilog!("[PERM::GENERAL] Error from server: '{msg}'");
+                        remilog!(
+                            "[PERM::GENERAL] Error from server: '{msg}' with request: '{}'",
+                            self.request_data
+                        );
                         self.moving_in_history = false;
                         self.server_name = self.history[self.history_index].0.clone();
                         self.request_data = self.history[self.history_index].1.clone();
@@ -230,7 +234,7 @@ impl eframe::App for App {
                 ui.menu_button(RichText::new("#").size(TEXT_SIZE).color(TEXT_COLOR), |ui| {
                     ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
                     ui.style_mut().visuals.widgets.inactive.weak_bg_fill = BG_COLOR;
-                    ui.style_mut().visuals.widgets.hovered.weak_bg_fill = BG_COLOR;
+                    ui.style_mut().visuals.widgets.hovered.weak_bg_fill = HOVERED_BG_COLOR;
                     let mut bookmark_to_remove = None;
                     for (i, bookmark) in self.bookmarks.iter().enumerate() {
                         let response =
@@ -249,11 +253,25 @@ impl eframe::App for App {
                     ui.style_mut().wrap_mode = None;
                 });
 
+                if ui
+                    .button(RichText::new("+").size(TEXT_SIZE).color(TEXT_COLOR))
+                    .clicked()
+                    && !self.bookmarks.contains(&self.request_data)
+                {
+                    self.bookmarks.push(self.request_data.clone())
+                }
+
                 let available_width = ui.available_width();
                 let console_button_response =
                     ui.menu_button(RichText::new("$").size(TEXT_SIZE).color(TEXT_COLOR), |ui| {
                         ui.set_max_width(available_width);
                         ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+                        ui.label(
+                            RichText::new("Console")
+                                .size(MINOR_SIZE)
+                                .color(BRIGHT_TEXT_COLOR)
+                                .underline(),
+                        );
                         ui.label(
                             RichText::new(OUT.lock().unwrap().as_str())
                                 .size(TEXT_SIZE / 1.5)
@@ -266,20 +284,12 @@ impl eframe::App for App {
                     OUT.lock().unwrap().clear();
                 }
 
-                if ui
-                    .button(RichText::new("+").size(TEXT_SIZE).color(TEXT_COLOR))
-                    .clicked()
-                    && !self.bookmarks.contains(&self.request_data)
-                {
-                    self.bookmarks.push(self.request_data.clone())
-                }
-
                 ui.style_mut().override_font_id = Some(egui::FontId {
                     size: TEXT_SIZE,
                     family: egui::FontFamily::Proportional,
                 });
                 let text_edit = egui::TextEdit::singleline(&mut self.url_bar_data)
-                    .text_color(LIST_ELEM_COLOR)
+                    .text_color(BRIGHT_TEXT_COLOR)
                     .desired_width(f32::INFINITY);
                 let lost_focus = ui.add(text_edit).lost_focus();
                 ui.style_mut().override_font_id = None;
@@ -346,7 +356,7 @@ impl eframe::App for App {
                                 ui.label(
                                     RichText::new(format!("* {el}"))
                                         .size(TEXT_SIZE)
-                                        .color(LIST_ELEM_COLOR),
+                                        .color(BRIGHT_TEXT_COLOR),
                                 );
                             }
                         }
