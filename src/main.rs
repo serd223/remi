@@ -8,7 +8,7 @@ use std::{
     io::{Read, Write},
     net::TcpStream,
     str::FromStr,
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
 use eframe::egui::{self, Color32, Key, RichText};
@@ -45,6 +45,25 @@ struct App {
     history: Vec<(String, String)>,
     history_index: usize,
     redir: bool,
+}
+
+static OUT: Mutex<String> = Mutex::new(String::new());
+fn _write_str(s: impl AsRef<str>) {
+    OUT.lock().unwrap().push_str(s.as_ref());
+}
+fn _write_str_ln(s: impl AsRef<str>) {
+    let mut guard = OUT.lock().unwrap();
+    guard.push_str(s.as_ref());
+    guard.push('\n');
+}
+
+macro_rules! remilog {
+    () => {
+        _write_str("\n")
+    };
+    ($($arg:tt)*) => {{
+        _write_str_ln(format!("{}", format_args!($($arg)*)));
+    }};
 }
 
 fn main() -> eframe::Result {
@@ -135,10 +154,19 @@ impl eframe::App for App {
                         kind: PermanentFailureKind::NotFound,
                         msg,
                     } => {
-                        eprintln!(
-                            "[ERROR] '{:?}' couldn't be found: '{msg}'",
+                        remilog!(
+                            "[PERM::NOTFOUND] '{:?}' couldn't be found: '{msg}'",
                             self.request_data
                         );
+                        self.moving_in_history = false;
+                        self.server_name = self.history[self.history_index].0.clone();
+                        self.request_data = self.history[self.history_index].1.clone();
+                    }
+                    GeminiResponse::PermanentFailure {
+                        kind: PermanentFailureKind::General,
+                        msg,
+                    } => {
+                        remilog!("[PERM::GENERAL] Error from server: '{msg}'");
                         self.moving_in_history = false;
                         self.server_name = self.history[self.history_index].0.clone();
                         self.request_data = self.history[self.history_index].1.clone();
@@ -155,9 +183,10 @@ impl eframe::App for App {
                     _ => panic!("[ERROR] Unsupported response: {response:?}"),
                 },
                 Err(e) => {
-                    eprintln!(
-                        "[ERROR] Request error from server '{}' with request '{}': {e}",
-                        self.server_name, self.request_data
+                    remilog!(
+                        "[REQUEST ERROR] Request error from server '{}' with request '{}': {e}",
+                        self.server_name,
+                        self.request_data
                     );
                     if self.history.len() == 0 {
                         self.history
@@ -198,43 +227,44 @@ impl eframe::App for App {
                         self.moving_in_history = true;
                     }
                 }
+                ui.menu_button(RichText::new("#").size(TEXT_SIZE).color(TEXT_COLOR), |ui| {
+                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+                    ui.style_mut().visuals.widgets.inactive.weak_bg_fill = BG_COLOR;
+                    ui.style_mut().visuals.widgets.hovered.weak_bg_fill = BG_COLOR;
+                    let mut bookmark_to_remove = None;
+                    for (i, bookmark) in self.bookmarks.iter().enumerate() {
+                        let response =
+                            ui.button(RichText::new(bookmark).size(TEXT_SIZE).color(TEXT_COLOR));
+                        if response.clicked() {
+                            self.redir =
+                                redirect(&mut self.server_name, &mut self.request_data, bookmark);
+                        }
+                        if response.secondary_clicked() {
+                            bookmark_to_remove = Some(i);
+                        }
+                    }
+                    if let Some(i) = bookmark_to_remove {
+                        self.bookmarks.remove(i);
+                    }
+                    ui.style_mut().wrap_mode = None;
+                });
 
-                let popup_button_response =
-                    ui.button(RichText::new("#").size(TEXT_SIZE).color(TEXT_COLOR));
-                let popup_id = ui.make_persistent_id("bookmarks_popup");
-                if popup_button_response.clicked() {
-                    ui.memory_mut(|mem| mem.toggle_popup(popup_id))
-                }
-                egui::popup::popup_below_widget(
-                    ui,
-                    popup_id,
-                    &popup_button_response,
-                    egui::PopupCloseBehavior::CloseOnClickOutside,
-                    |ui| {
+                let available_width = ui.available_width();
+                let console_button_response =
+                    ui.menu_button(RichText::new("$").size(TEXT_SIZE).color(TEXT_COLOR), |ui| {
+                        ui.set_max_width(available_width);
                         ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
-                        ui.style_mut().visuals.widgets.inactive.weak_bg_fill = BG_COLOR;
-                        ui.style_mut().visuals.widgets.hovered.weak_bg_fill = BG_COLOR;
-                        let mut bookmark_to_remove = None;
-                        for (i, bookmark) in self.bookmarks.iter().enumerate() {
-                            let response = ui
-                                .button(RichText::new(bookmark).size(TEXT_SIZE).color(TEXT_COLOR));
-                            if response.clicked() {
-                                self.redir = redirect(
-                                    &mut self.server_name,
-                                    &mut self.request_data,
-                                    bookmark,
-                                );
-                            }
-                            if response.secondary_clicked() {
-                                bookmark_to_remove = Some(i);
-                            }
-                        }
-                        if let Some(i) = bookmark_to_remove {
-                            self.bookmarks.remove(i);
-                        }
+                        ui.label(
+                            RichText::new(OUT.lock().unwrap().as_str())
+                                .size(TEXT_SIZE / 1.5)
+                                .color(TEXT_COLOR)
+                                .monospace(),
+                        );
                         ui.style_mut().wrap_mode = None;
-                    },
-                );
+                    });
+                if console_button_response.response.secondary_clicked() {
+                    OUT.lock().unwrap().clear();
+                }
 
                 if ui
                     .button(RichText::new("+").size(TEXT_SIZE).color(TEXT_COLOR))
@@ -410,7 +440,7 @@ pub fn redirect(server_name: &mut String, request_data: &mut String, url: &str) 
     if url.contains("://") {
         if url.starts_with("gemini://") {
             if url.len() <= 9 {
-                eprintln!("[ERROR] '{url}' is invalid.");
+                remilog!("[REDIRECT ERROR] '{url}' is invalid.");
                 return false;
             } else {
                 *server_name = url[9..].to_string();
@@ -421,7 +451,7 @@ pub fn redirect(server_name: &mut String, request_data: &mut String, url: &str) 
                 return true;
             }
         } else {
-            eprintln!("[ERROR] '{url}' contains unsupported protocol.");
+            remilog!("[REDIRECT ERROR] '{url}' contains unsupported protocol.");
             return false;
         }
     } else if url.starts_with("/") {
