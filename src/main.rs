@@ -1,4 +1,4 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
+// #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
 mod gemtext;
 mod response;
@@ -232,9 +232,11 @@ impl eframe::App for App {
                     }
                 }
                 ui.menu_button(RichText::new("#").size(TEXT_SIZE).color(TEXT_COLOR), |ui| {
+                    ui.set_max_width(ui.min_size().x);
                     ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
                     ui.style_mut().visuals.widgets.inactive.weak_bg_fill = BG_COLOR;
                     ui.style_mut().visuals.widgets.hovered.weak_bg_fill = HOVERED_BG_COLOR;
+
                     let mut bookmark_to_remove = None;
                     for (i, bookmark) in self.bookmarks.iter().enumerate() {
                         let response =
